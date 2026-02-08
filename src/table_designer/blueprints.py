@@ -70,6 +70,7 @@ class BlueprintExporter:
         silhouettes = self._silhouettes_by_part(parts, view="top")
         for geometry in silhouettes:
             self._plot_silhouette(ax, geometry)
+        self._add_leg_face_fills(ax, parts, view="top")
         self._add_leg_face_outlines(ax, parts, view="top")
         self._add_leg_face_dimensions(ax, parts, view="top")
 
@@ -104,6 +105,7 @@ class BlueprintExporter:
         elif view == "front":
             self._add_front_dimensions(ax, parts)
         elif view == "detail_corner":
+            self._add_leg_face_fills(ax, parts, view="top")
             self._add_leg_face_outlines(ax, parts, view="top")
             self._add_leg_face_dimensions(ax, parts, view="top")
             x_min, x_max, y_min, y_max = self._bounds_for_geometries(silhouettes)
@@ -239,6 +241,22 @@ class BlueprintExporter:
                 x, y = poly.exterior.xy
                 ax.plot(x, y, color="black", linewidth=0.8)
 
+    def _add_leg_face_fills(
+        self,
+        ax: plt.Axes,
+        parts: dict[str, trimesh.Trimesh],
+        view: str,
+    ) -> None:
+        for name, mesh in parts.items():
+            if not name.startswith("leg_"):
+                continue
+            top_poly, bottom_poly = self._leg_face_polygons(mesh, view=view)
+            for poly in (top_poly, bottom_poly):
+                if poly is None:
+                    continue
+                x, y = poly.exterior.xy
+                ax.fill(x, y, color="red", linewidth=0)
+
     def _add_leg_face_dimensions(
         self,
         ax: plt.Axes,
@@ -267,6 +285,7 @@ class BlueprintExporter:
             top_poly,
             self._params.leg_top_size,
             offset=top_offset,
+            position="left_bottom",
         )
         if bottom_poly is not None:
             self._add_face_dimensions(
@@ -274,6 +293,7 @@ class BlueprintExporter:
                 bottom_poly,
                 self._params.leg_bottom_size,
                 offset=bottom_offset,
+                position="right_top",
             )
 
     def _add_face_dimensions(
@@ -282,25 +302,44 @@ class BlueprintExporter:
         poly: Polygon | None,
         size_mm: float,
         offset: float,
+        position: str,
     ) -> None:
         if poly is None:
             return
         x_min, x_max, y_min, y_max = self._bounds_for_geometry(poly)
         label = f"{size_mm:.0f} mm"
-        self._add_dimension(
-            ax,
-            (x_min, y_max + offset),
-            (x_max, y_max + offset),
-            label,
-            text_offset=(0.0, 12.0),
-        )
-        self._add_dimension(
-            ax,
-            (x_max + offset, y_min),
-            (x_max + offset, y_max),
-            label,
-            text_offset=(12.0, 0.0),
-        )
+        if position == "left_bottom":
+            self._add_dimension(
+                ax,
+                (x_min, y_min - offset),
+                (x_max, y_min - offset),
+                label,
+                text_offset=(0.0, -12.0),
+            )
+            self._add_dimension(
+                ax,
+                (x_min - offset, y_min),
+                (x_min - offset, y_max),
+                label,
+                text_offset=(-12.0, 0.0),
+            )
+        elif position == "right_top":
+            self._add_dimension(
+                ax,
+                (x_min, y_max + offset),
+                (x_max, y_max + offset),
+                label,
+                text_offset=(0.0, 12.0),
+            )
+            self._add_dimension(
+                ax,
+                (x_max + offset, y_min),
+                (x_max + offset, y_max),
+                label,
+                text_offset=(12.0, 0.0),
+            )
+        else:
+            raise ValueError("position must be 'left_bottom' or 'right_top'")
 
     def _leg_face_polygons(
         self,
