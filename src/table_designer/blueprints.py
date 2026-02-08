@@ -49,6 +49,8 @@ class BlueprintExporter:
             self._add_top_dimensions(ax, parts)
         elif view == "front":
             self._add_front_dimensions(ax, parts)
+        elif view == "side":
+            self._add_side_dimensions(ax, parts)
             self._add_leg_angle_indicator(ax, parts, view="front")
         elif view == "side":
             self._add_leg_angle_indicator(ax, parts, view="side")
@@ -110,6 +112,7 @@ class BlueprintExporter:
             self._add_front_dimensions(ax, parts)
             self._add_leg_angle_indicator(ax, parts, view="front")
         elif view == "side":
+            self._add_side_dimensions(ax, parts)
             self._add_leg_angle_indicator(ax, parts, view="side")
         elif view == "detail_corner":
             self._add_leg_face_fills(ax, parts, view="top")
@@ -152,11 +155,42 @@ class BlueprintExporter:
     def _add_front_dimensions(self, ax: plt.Axes, parts: dict[str, trimesh.Trimesh]) -> None:
         x_min, x_max, z_min, z_max = self._bounds_for_parts(parts, view="front")
         offset = 80.0
+        apron_offset = 160.0
         self._add_dimension(
             ax,
             (x_min - offset, z_min),
             (x_min - offset, z_max),
             f"{self._params.table_height:.0f} mm",
+            text_offset=(-30.0, 0.0),
+        )
+        apron_top = -self._params.top_thickness - self._params.apron_top_gap
+        apron_bottom = apron_top - self._params.apron_height
+        self._add_dimension(
+            ax,
+            (x_min - apron_offset, apron_bottom),
+            (x_min - apron_offset, apron_top),
+            f"{self._params.apron_height:.0f} mm",
+            text_offset=(-30.0, 0.0),
+        )
+
+    def _add_side_dimensions(self, ax: plt.Axes, parts: dict[str, trimesh.Trimesh]) -> None:
+        x_min, x_max, z_min, z_max = self._bounds_for_parts(parts, view="side")
+        offset = 80.0
+        apron_offset = 160.0
+        self._add_dimension(
+            ax,
+            (x_min - offset, z_min),
+            (x_min - offset, z_max),
+            f"{self._params.table_height:.0f} mm",
+            text_offset=(-30.0, 0.0),
+        )
+        apron_top = -self._params.top_thickness - self._params.apron_top_gap
+        apron_bottom = apron_top - self._params.apron_height
+        self._add_dimension(
+            ax,
+            (x_min - apron_offset, apron_bottom),
+            (x_min - apron_offset, apron_top),
+            f"{self._params.apron_height:.0f} mm",
             text_offset=(-30.0, 0.0),
         )
 
@@ -173,12 +207,13 @@ class BlueprintExporter:
             "",
             xy=end,
             xytext=start,
-            arrowprops=dict(arrowstyle="<->", color="black", linewidth=0.8),
+            arrowprops=dict(arrowstyle="<->", color="black", linewidth=0.8, mutation_scale=8),
             zorder=zorder,
+            clip_on=False,
         )
         text_x = (start[0] + end[0]) / 2.0 + text_offset[0]
         text_y = (start[1] + end[1]) / 2.0 + text_offset[1]
-        ax.text(text_x, text_y, text, fontsize=8, ha="center", va="center", zorder=zorder)
+        ax.text(text_x, text_y, text, fontsize=8, ha="center", va="center", zorder=zorder, clip_on=False)
 
     def _bounds_for_geometry(
         self,
@@ -412,7 +447,7 @@ class BlueprintExporter:
         return top_poly
 
     def _add_leg_angle_indicator(self, ax: plt.Axes, parts: dict[str, trimesh.Trimesh], view: str) -> None:
-        leg = self._detail_leg_mesh(parts, view=view)
+        leg = self._angle_leg_mesh(parts, view=view)
         if leg is None:
             return
 
@@ -430,31 +465,34 @@ class BlueprintExporter:
             [ref_bottom[0], ref_top[0]],
             [ref_bottom[1], ref_top[1]],
             color="black",
-            linewidth=0.8,
+            linewidth=1.0,
             linestyle=(0, (3, 3)),
-            zorder=2.0,
+            zorder=6.0,
+            clip_on=False,
         )
         ax.plot(
             [bottom_2d[0], top_2d[0]],
             [bottom_2d[1], top_2d[1]],
             color="black",
-            linewidth=0.8,
+            linewidth=1.0,
             linestyle=(0, (3, 3)),
-            zorder=2.0,
+            zorder=6.0,
+            clip_on=False,
         )
 
         angle = self._params.leg_splay_x_deg if view == "front" else self._params.leg_splay_y_deg
         label = rf"${abs(angle):.0f}^\circ$"
         y_min = min(bottom_2d[1], top_2d[1])
-        text_offset = np.array([12.0, -16.0])
+        text_offset = np.array([12.0, -18.0])
         ax.text(
-            top_2d[0] + text_offset[0],
+            bottom_2d[0] + text_offset[0],
             y_min + text_offset[1],
             label,
-            fontsize=8,
+            fontsize=12,
             ha="left",
             va="bottom",
-            zorder=5.0,
+            zorder=7.0,
+            clip_on=False,
         )
 
     def _detail_leg_mesh(self, parts: dict[str, trimesh.Trimesh], view: str) -> trimesh.Trimesh | None:
@@ -471,6 +509,20 @@ class BlueprintExporter:
         if not leg_entries:
             return None
         _, mesh = max(leg_entries, key=lambda item: item[0])
+        return mesh
+
+    def _angle_leg_mesh(self, parts: dict[str, trimesh.Trimesh], view: str) -> trimesh.Trimesh | None:
+        leg_entries: list[tuple[float, float, trimesh.Trimesh]] = []
+        for name, mesh in parts.items():
+            if not name.startswith("leg_"):
+                continue
+            centroid = mesh.vertices.mean(axis=0)
+            proj = self._project_points(centroid[None, :], view=view)[0]
+            leg_entries.append((abs(float(proj[0])), float(proj[0]), mesh))
+
+        if not leg_entries:
+            return None
+        _, _, mesh = min(leg_entries, key=lambda item: (item[0], item[1]))
         return mesh
 
     def _leg_axis_centers(self, mesh: trimesh.Trimesh) -> tuple[np.ndarray | None, np.ndarray | None]:
