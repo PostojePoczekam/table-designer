@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-table-streamlit = "table_designer.main:main"
+table_designer = "table_designer.main:main"
 
 [build-system]
 requires = ["setuptools>=70"]
