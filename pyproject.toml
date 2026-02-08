@@ -1,5 +1,5 @@
 [project]
-name = "table"
+name = "table_designer"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-table-streamlit = "table.streamlit_app:main"
+table-streamlit = "table_designer.main:main"
 
 [build-system]
 requires = ["setuptools>=70"]
