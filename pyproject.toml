@@ -1,0 +1,25 @@
+[project]
+name = "table"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "networkx>=3.6.1",
+    "numpy>=2.4.2",
+    "kaleido>=1.0.0",
+    "plotly>=6.3.0",
+    "scipy>=1.17.0",
+    "reportlab>=4.4.4",
+    "shapely>=2.0.6",
+    "streamlit>=1.49.1",
+    "trimesh>=4.11.1",
+]
+
+[project.scripts]
+table-streamlit = "table.streamlit_app:main"
+
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
