@@ -14,10 +14,10 @@ if __package__ is None:
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
 
-from table.blueprints import BlueprintExporter
-from table.geometry import TableGeometryBuilder
-from table.params import TableParams, validate_params
-from table.pdf_exporter import PdfExporter
+from table_designer.blueprints import BlueprintExporter
+from table_designer.geometry import TableGeometryBuilder
+from table_designer.params import TableParams, validate_params
+from table_designer.pdf_exporter import PdfExporter
 
 
 STRINGS = {

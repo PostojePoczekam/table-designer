@@ -70,6 +70,8 @@ class BlueprintExporter:
         silhouettes = self._silhouettes_by_part(parts, view="top")
         for geometry in silhouettes:
             self._plot_silhouette(ax, geometry)
+        self._add_leg_face_outlines(ax, parts, view="top")
+        self._add_leg_face_dimensions(ax, parts, view="top")
 
         x_min, x_max, y_min, y_max = self._bounds_for_geometries(silhouettes)
         detail_span = min(600.0, (x_max - x_min) * 0.5, (y_max - y_min) * 0.8)
@@ -102,6 +104,8 @@ class BlueprintExporter:
         elif view == "front":
             self._add_front_dimensions(ax, parts)
         elif view == "detail_corner":
+            self._add_leg_face_outlines(ax, parts, view="top")
+            self._add_leg_face_dimensions(ax, parts, view="top")
             x_min, x_max, y_min, y_max = self._bounds_for_geometries(silhouettes)
             detail_span = min(600.0, (x_max - x_min) * 0.5, (y_max - y_min) * 0.8)
             margin = 40.0
@@ -218,6 +222,111 @@ class BlueprintExporter:
             silhouettes.append(unary_union(triangles))
 
         return silhouettes
+
+    def _add_leg_face_outlines(
+        self,
+        ax: plt.Axes,
+        parts: dict[str, trimesh.Trimesh],
+        view: str,
+    ) -> None:
+        for name, mesh in parts.items():
+            if not name.startswith("leg_"):
+                continue
+            top_poly, bottom_poly = self._leg_face_polygons(mesh, view=view)
+            for poly in (top_poly, bottom_poly):
+                if poly is None:
+                    continue
+                x, y = poly.exterior.xy
+                ax.plot(x, y, color="black", linewidth=0.8)
+
+    def _add_leg_face_dimensions(
+        self,
+        ax: plt.Axes,
+        parts: dict[str, trimesh.Trimesh],
+        view: str,
+    ) -> None:
+        leg_entries: list[tuple[float, Polygon | None, Polygon | None]] = []
+        for name, mesh in parts.items():
+            if not name.startswith("leg_"):
+                continue
+            top_poly, bottom_poly = self._leg_face_polygons(mesh, view=view)
+            if top_poly is None:
+                continue
+            score = float(top_poly.centroid.x + top_poly.centroid.y)
+            leg_entries.append((score, top_poly, bottom_poly))
+
+        if not leg_entries:
+            return
+
+        _, top_poly, bottom_poly = max(leg_entries, key=lambda item: item[0])
+        top_offset = 20.0
+        bottom_offset = 60.0
+
+        self._add_face_dimensions(
+            ax,
+            top_poly,
+            self._params.leg_top_size,
+            offset=top_offset,
+        )
+        if bottom_poly is not None:
+            self._add_face_dimensions(
+                ax,
+                bottom_poly,
+                self._params.leg_bottom_size,
+                offset=bottom_offset,
+            )
+
+    def _add_face_dimensions(
+        self,
+        ax: plt.Axes,
+        poly: Polygon | None,
+        size_mm: float,
+        offset: float,
+    ) -> None:
+        if poly is None:
+            return
+        x_min, x_max, y_min, y_max = self._bounds_for_geometry(poly)
+        label = f"{size_mm:.0f} mm"
+        self._add_dimension(
+            ax,
+            (x_min, y_max + offset),
+            (x_max, y_max + offset),
+            label,
+            text_offset=(0.0, 12.0),
+        )
+        self._add_dimension(
+            ax,
+            (x_max + offset, y_min),
+            (x_max + offset, y_max),
+            label,
+            text_offset=(12.0, 0.0),
+        )
+
+    def _leg_face_polygons(
+        self,
+        mesh: trimesh.Trimesh,
+        view: str,
+    ) -> tuple[Polygon | None, Polygon | None]:
+        vertices = mesh.vertices
+        if vertices.shape[0] < 8:
+            return None, None
+
+        centered = vertices - vertices.mean(axis=0)
+        # Use PCA to estimate the leg axis, then pick the extreme face vertices.
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+        axis = vh[0]
+        projections = centered @ axis
+
+        order = np.argsort(projections)
+        top_pts = vertices[order[-4:]]
+        bottom_pts = vertices[order[:4]]
+
+        top_projected = self._project_points(top_pts, view=view)
+        bottom_projected = self._project_points(bottom_pts, view=view)
+
+        top_poly = Polygon(top_projected).convex_hull
+        bottom_poly = Polygon(bottom_projected).convex_hull
+        return top_poly, bottom_poly
 
     @staticmethod
     def _plot_silhouette(ax: plt.Axes, geometry: Polygon | MultiPolygon) -> None:
